@@ -16,6 +16,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // parses the httpOnly refresh-token cookie into req.cookies
 
+// Public root status/health endpoint. Lets you (and uptime checks) hit the
+// base URL to confirm the service is live without needing an /api path.
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    status: 'ok',
+    service: 'TP00001 backend',
+    uptime: process.uptime(),
+  });
+});
+
 // API routes
 app.use('/api', apiRoutes);
 
