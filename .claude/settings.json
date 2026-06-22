@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node -e \"require\\('./src/app'\\); require\\('./src/modules/home/home.service'\\); console.log\\('app + home module load OK'\\);\")",
+      "Bash(node -e \"require\\('./src/app'\\); require\\('./src/seed.js' in {} ? '' : './src/config/env'\\); const a=require\\('./src/modules/auth/auth.service'\\); const u=require\\('./src/modules/users/user.service'\\); const m=require\\('./src/middlewares/auth'\\); console.log\\('OK: app + auth.service + user.service + middleware load clean'\\);\")",
+      "PowerShell(npm run seed)",
+      "PowerShell(try { \\(Invoke-WebRequest -Uri \"http://localhost:5000/api/health\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { \"NOT RUNNING: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(node src/_smoke.js)",
+      "PowerShell(node src/_smoke2.js)",
+      "Bash(node -c src/modules/users/user.service.js)",
+      "Bash(node -c src/modules/users/user.controller.js)",
+      "Bash(node -c src/modules/users/user.routes.js)",
+      "Bash(node -c src/modules/users/user.model.js)",
+      "Bash(node -c src/modules/users/user.validation.js)",
+      "Bash(node -c src/seed.js)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('postman_collection.json','utf8'\\)\\); console.log\\('valid JSON'\\)\")",
+      "Bash(node -e \"require\\('./src/app'\\); console.log\\('app loaded OK'\\);\")"
+    ]
+  }
+}

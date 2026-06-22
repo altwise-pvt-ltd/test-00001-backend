@@ -1,0 +1,674 @@
+{
+  "info": {
+    "name": "TP00001 School API",
+    "description": "Multi-tenant school management API. Flow: principal -> create users (DOB password) -> classes/sections/subjects -> teaching assignments -> assignments -> submissions -> grading.\n\nUsage:\n1. Run **Auth > Login** (prefilled with the seeded principal) — it saves {{token}} automatically.\n2. The create requests save ids ({{classId}}, {{sectionId}}, {{subjectId}}, {{teacherId}}, {{studentId}}, {{teachingAssignmentId}}, {{assignmentId}}, {{submissionId}}) so later requests chain off them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "teacherId", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "sectionId", "value": "" },
+    { "key": "subjectId", "value": "" },
+    { "key": "teachingAssignmentId", "value": "" },
+    { "key": "assignmentId", "value": "" },
+    { "key": "submissionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Principal\",\n  \"email\": \"principal@newschool.test\",\n  \"password\": \"Password@123\",\n  \"schoolName\": \"New School\",\n  \"schoolAddress\": \"1 Example Road\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login (saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', res.data.accessToken);",
+                  "  console.log('token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"principal@greenwood.test\",\n  \"password\": \"Principal@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh (saves token, uses httpOnly cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', res.data.accessToken);",
+                  "  console.log('token refreshed');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Logout (current session)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Logout All",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout-all", "host": ["{{baseUrl}}"], "path": ["auth", "logout-all"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (principal)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "List Teachers (directory)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/teachers", "host": ["{{baseUrl}}"], "path": ["users", "teachers"] }
+          }
+        },
+        {
+          "name": "List Students (directory)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/students", "host": ["{{baseUrl}}"], "path": ["users", "students"] }
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Get Teacher (detail: subjects/classes/sections/assignments)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/teachers/{{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "teachers", "{{teacherId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Student (detail: class/section/subjects/assignments/submissions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/students/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "students", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Set Teacher Subjects/Sections (principal: add more or reduce)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teachingAssignments\": [\n    { \"subjectId\": \"{{subjectId}}\", \"sectionId\": \"{{sectionId}}\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/teachers/{{teacherId}}/teaching",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "teachers", "{{teacherId}}", "teaching"]
+            }
+          }
+        },
+        {
+          "name": "Create Teacher (saves teacherId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.user && res.data.user._id) {",
+                  "  pm.collectionVariables.set('teacherId', res.data.user._id);",
+                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "  console.log('initialPassword:', res.data.initialPassword);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alan Turing\",\n  \"email\": \"alan@greenwood.test\",\n  \"role\": \"teacher\",\n  \"dateOfBirth\": \"1990-03-07\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Create Student (saves studentId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.user && res.data.user._id) {",
+                  "  pm.collectionVariables.set('studentId', res.data.user._id);",
+                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "  console.log('initialPassword:', res.data.initialPassword);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sam Pupil\",\n  \"email\": \"sam@greenwood.test\",\n  \"role\": \"student\",\n  \"dateOfBirth\": \"2014-06-21\",\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Classes (principal)",
+      "item": [
+        {
+          "name": "List Classes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/classes", "host": ["{{baseUrl}}"], "path": ["classes"] }
+          }
+        },
+        {
+          "name": "Get Class",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/classes/{{classId}}", "host": ["{{baseUrl}}"], "path": ["classes", "{{classId}}"] }
+          }
+        },
+        {
+          "name": "Get Class Detail (principal: students/subjects/teachers/assignments/submissions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classId}}/detail",
+              "host": ["{{baseUrl}}"],
+              "path": ["classes", "{{classId}}", "detail"]
+            }
+          }
+        },
+        {
+          "name": "Create Class (saves classId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('classId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"level\": 5\n}" },
+            "url": { "raw": "{{baseUrl}}/classes", "host": ["{{baseUrl}}"], "path": ["classes"] }
+          }
+        },
+        {
+          "name": "Update Class",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"level\": 6\n}" },
+            "url": { "raw": "{{baseUrl}}/classes/{{classId}}", "host": ["{{baseUrl}}"], "path": ["classes", "{{classId}}"] }
+          }
+        },
+        {
+          "name": "Delete Class",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/classes/{{classId}}", "host": ["{{baseUrl}}"], "path": ["classes", "{{classId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sections (principal)",
+      "item": [
+        {
+          "name": "List Sections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sections?classId={{classId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["sections"],
+              "query": [{ "key": "classId", "value": "{{classId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Section",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/sections/{{sectionId}}", "host": ["{{baseUrl}}"], "path": ["sections", "{{sectionId}}"] }
+          }
+        },
+        {
+          "name": "Create Section (saves sectionId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('sectionId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"A\",\n  \"classId\": \"{{classId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/sections", "host": ["{{baseUrl}}"], "path": ["sections"] }
+          }
+        },
+        {
+          "name": "Update Section",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"B\"\n}" },
+            "url": { "raw": "{{baseUrl}}/sections/{{sectionId}}", "host": ["{{baseUrl}}"], "path": ["sections", "{{sectionId}}"] }
+          }
+        },
+        {
+          "name": "Delete Section",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/sections/{{sectionId}}", "host": ["{{baseUrl}}"], "path": ["sections", "{{sectionId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subjects (principal)",
+      "item": [
+        {
+          "name": "List Subjects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/subjects", "host": ["{{baseUrl}}"], "path": ["subjects"] }
+          }
+        },
+        {
+          "name": "Get Subject",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/subjects/{{subjectId}}", "host": ["{{baseUrl}}"], "path": ["subjects", "{{subjectId}}"] }
+          }
+        },
+        {
+          "name": "Create Subject (saves subjectId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('subjectId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mathematics\",\n  \"code\": \"MATH\"\n}" },
+            "url": { "raw": "{{baseUrl}}/subjects", "host": ["{{baseUrl}}"], "path": ["subjects"] }
+          }
+        },
+        {
+          "name": "Update Subject",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Maths\"\n}" },
+            "url": { "raw": "{{baseUrl}}/subjects/{{subjectId}}", "host": ["{{baseUrl}}"], "path": ["subjects", "{{subjectId}}"] }
+          }
+        },
+        {
+          "name": "Delete Subject",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/subjects/{{subjectId}}", "host": ["{{baseUrl}}"], "path": ["subjects", "{{subjectId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Teaching Assignments (principal)",
+      "item": [
+        {
+          "name": "List Teaching Assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments?teacherId={{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["teaching-assignments"],
+              "query": [
+                { "key": "teacherId", "value": "{{teacherId}}" },
+                { "key": "sectionId", "value": "{{sectionId}}", "disabled": true },
+                { "key": "subjectId", "value": "{{subjectId}}", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Teaching Assignment (saves teachingAssignmentId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('teachingAssignmentId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"sectionId\": \"{{sectionId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/teaching-assignments", "host": ["{{baseUrl}}"], "path": ["teaching-assignments"] }
+          }
+        },
+        {
+          "name": "Delete Teaching Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["teaching-assignments", "{{teachingAssignmentId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assignments (teacher)",
+      "item": [
+        {
+          "name": "List Assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assignments?sectionId={{sectionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignments"],
+              "query": [{ "key": "sectionId", "value": "{{sectionId}}", "disabled": true }]
+            }
+          }
+        },
+        {
+          "name": "Get Assignment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["assignments", "{{assignmentId}}"] }
+          }
+        },
+        {
+          "name": "Create Assignment (teacher, saves assignmentId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('assignmentId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Read chapter 4\",\n  \"teachingAssignmentId\": \"{{teachingAssignmentId}}\",\n  \"description\": \"Read and summarize chapter 4\",\n  \"type\": \"reading\",\n  \"dueDate\": \"2026-07-01\",\n  \"attachments\": []\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/assignments", "host": ["{{baseUrl}}"], "path": ["assignments"] }
+          }
+        },
+        {
+          "name": "Update Assignment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Read chapter 4 (updated)\"\n}" },
+            "url": { "raw": "{{baseUrl}}/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["assignments", "{{assignmentId}}"] }
+          }
+        },
+        {
+          "name": "Delete Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["assignments", "{{assignmentId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Submissions",
+      "item": [
+        {
+          "name": "List Submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/submissions?assignmentId={{assignmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["submissions"],
+              "query": [{ "key": "assignmentId", "value": "{{assignmentId}}", "disabled": true }]
+            }
+          }
+        },
+        {
+          "name": "Get Submission",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/submissions/{{submissionId}}", "host": ["{{baseUrl}}"], "path": ["submissions", "{{submissionId}}"] }
+          }
+        },
+        {
+          "name": "Create Submission (student, saves submissionId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('submissionId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignmentId\": \"{{assignmentId}}\",\n  \"content\": \"Here is my summary of chapter 4...\",\n  \"attachments\": []\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/submissions", "host": ["{{baseUrl}}"], "path": ["submissions"] }
+          }
+        },
+        {
+          "name": "Grade Submission (teacher)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"grade\": \"A\",\n  \"feedback\": \"Great work!\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/submissions/{{submissionId}}/grade",
+              "host": ["{{baseUrl}}"],
+              "path": ["submissions", "{{submissionId}}", "grade"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Home (dashboard)",
+      "item": [
+        {
+          "name": "Get Home",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/home", "host": ["{{baseUrl}}"], "path": ["home"] }
+          }
+        }
+      ]
+    }
+  ]
+}
