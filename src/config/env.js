@@ -8,7 +8,12 @@ const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 5000,
   mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/tp00001',
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  // Comma-separated list of allowed browser origins for CORS.
+  // e.g. CLIENT_URL="http://localhost:5173,https://my-app.vercel.app"
+  clientUrls: (process.env.CLIENT_URL || 'http://localhost:5173')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean),
   jwt: {
     // Short-lived access token (stateless, carries identity + jti + tokenVersion).
     accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-only-insecure-secret-change-me',
