@@ -1,15 +1,20 @@
 // Business logic for classes (grade levels). Every query is fenced by schoolId
 // so one school can never see or mutate another's classes. Soft-delete only
 // (deletedAt) — hard-deleting a class would orphan its sections and students.
+//
+// Managed by BOTH a principal (own school) and the super-admin (a school they
+// target explicitly). schoolId is resolved upstream (resolveSchoolScope); every
+// mutation re-verifies that target school exists and is not soft-deleted.
 const mongoose = require('mongoose');
 const Class = require('./class.model');
 const Section = require('../section/section.model');
 const User = require('../users/user.model');
 require('../subject/subject.model'); // registered for populate('subjectId'); not queried directly here
-const TeachingAssignment = require('../assignment/teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const Assignment = require('../assignment/assignment.model');
 const Submission = require('../submission/submission.model');
 const ApiError = require('../../utils/ApiError');
+const { assertSchoolExists } = require('../schools/school.guard');
 const { USER_ROLES } = require('../../constant/constant');
 
 const notDeleted = { deletedAt: null };
@@ -25,12 +30,14 @@ async function getClassById(id, schoolId) {
 }
 
 async function createClass(schoolId, data, userId) {
+  await assertSchoolExists(schoolId);
   const existing = await Class.findOne({ schoolId, level: data.level, deletedAt: null });
   if (existing) throw ApiError.conflict(`Class ${data.level} already exists`);
   return Class.create({ ...data, schoolId, createdBy: userId });
 }
 
 async function updateClass(id, schoolId, data, userId) {
+  await assertSchoolExists(schoolId);
   const doc = await Class.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
     { ...data, updatedBy: userId },
@@ -41,6 +48,7 @@ async function updateClass(id, schoolId, data, userId) {
 }
 
 async function deleteClass(id, schoolId, userId) {
+  await assertSchoolExists(schoolId);
   const doc = await Class.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
     { deletedAt: new Date(), updatedBy: userId },
@@ -77,21 +85,21 @@ async function getClassDetail(id, schoolId) {
       .select('name sectionId')
       .sort({ name: 1 })
       .lean(),
-    TeachingAssignment.find({ sectionId: { $in: sectionIds }, schoolId, ...notDeleted })
+    SubjectAllocation.find({ sectionId: { $in: sectionIds }, schoolId, ...notDeleted })
       .populate('subjectId', 'name code')
       .populate('teacherId', 'name')
       .lean(),
     Assignment.find({ sectionId: { $in: sectionIds }, schoolId, ...notDeleted })
       .sort({ createdAt: -1 })
       .populate({
-        path: 'teachingAssignmentId',
+        path: 'subjectAllocationId',
         select: 'subjectId teacherId',
         populate: [
           { path: 'subjectId', select: 'name' },
           { path: 'teacherId', select: 'name' },
         ],
       })
-      .select('title type dueDate sectionId teachingAssignmentId createdAt')
+      .select('title type dueDate sectionId subjectAllocationId createdAt')
       .lean(),
   ]);
 
@@ -104,7 +112,7 @@ async function getClassDetail(id, schoolId) {
         .lean()
     : [];
 
-  // group teaching assignments by subject -> teacher(s) in this class
+  // group subject allocations by subject -> teacher(s) in this class
   const subjectsMap = new Map();
   for (const t of teaching) {
     const subject = t.subjectId;
@@ -140,8 +148,8 @@ async function getClassDetail(id, schoolId) {
       type: a.type,
       dueDate: a.dueDate,
       sectionName: sectionNameById.get(String(a.sectionId)) ?? null,
-      subjectName: a.teachingAssignmentId?.subjectId?.name ?? null,
-      teacherName: a.teachingAssignmentId?.teacherId?.name ?? null,
+      subjectName: a.subjectAllocationId?.subjectId?.name ?? null,
+      teacherName: a.subjectAllocationId?.teacherId?.name ?? null,
       createdAt: a.createdAt,
     })),
     submissions: submissions.map((s) => ({

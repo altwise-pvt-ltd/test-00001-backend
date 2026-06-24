@@ -20,9 +20,16 @@ const schoolSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // The principal who registered this school. Nullable only transiently during
-    // the registration transaction (set immediately after the principal exists).
+    // The super-admin who provisioned this school (schools are created by a
+    // super-admin via POST /api/schools). Nullable for seed/bootstrap data.
     createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+
+    // The super-admin who last mutated this school (e.g. activate/deactivate).
+    updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,

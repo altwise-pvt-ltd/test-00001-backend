@@ -3,9 +3,10 @@ const School = require('../../models/School');
 const Class = require('../class/class.model');
 const Section = require('../section/section.model');
 const Subject = require('../subject/subject.model');
-const TeachingAssignment = require('../assignment/teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const Assignment = require('../assignment/assignment.model');
 const Submission = require('../submission/submission.model');
+const adminService = require('../admin/admin.service');
 const { USER_ROLES, SUBMISSION_STATUS } = require('../../constant/constant');
 
 const UPCOMING_WINDOW_DAYS = 14;
@@ -90,33 +91,33 @@ async function buildTeacherHome(user) {
   const teacherId = user._id;
   const { now, end } = upcomingWindow();
 
-  // teaching assignments first — we need their ids to scope the rest
-  const teaching = await TeachingAssignment.find({ teacherId, schoolId, ...notDeleted })
+  // subject allocations first — we need their ids to scope the rest
+  const teaching = await SubjectAllocation.find({ teacherId, schoolId, ...notDeleted })
     .populate('subjectId', 'name')
     .populate({ path: 'sectionId', select: 'name classId', populate: { path: 'classId', select: 'level' } })
     .lean();
 
-  const taIds = teaching.map((t) => t._id);
+  const allocationIds = teaching.map((t) => t._id);
 
   // ids of this teacher's own assignments — scopes both the to-grade count and
   // the to-grade list, so the list is capped to THIS teacher's submissions
   // rather than the school-wide 5 oldest (which could exclude them entirely).
   const myAssignmentIds = await Assignment.find({
-    teachingAssignmentId: { $in: taIds },
+    subjectAllocationId: { $in: allocationIds },
     schoolId,
     ...notDeleted,
   }).distinct('_id');
 
   const [assignmentsCreated, submissionsToGradeCount, recentAssignments, myToGrade, upcoming] =
     await Promise.all([
-      Assignment.countDocuments({ teachingAssignmentId: { $in: taIds }, schoolId, ...notDeleted }),
+      Assignment.countDocuments({ subjectAllocationId: { $in: allocationIds }, schoolId, ...notDeleted }),
       Submission.countDocuments({
         schoolId,
         status: SUBMISSION_STATUS.SUBMITTED,
         assignmentId: { $in: myAssignmentIds },
         ...notDeleted,
       }),
-      Assignment.find({ teachingAssignmentId: { $in: taIds }, schoolId, ...notDeleted })
+      Assignment.find({ subjectAllocationId: { $in: allocationIds }, schoolId, ...notDeleted })
         .sort({ createdAt: -1 })
         .limit(RECENT_LIMIT)
         .populate('sectionId', 'name')
@@ -134,7 +135,7 @@ async function buildTeacherHome(user) {
         .populate('assignmentId', 'title')
         .lean(),
       Assignment.find({
-        teachingAssignmentId: { $in: taIds },
+        subjectAllocationId: { $in: allocationIds },
         schoolId,
         dueDate: { $gte: now, $lte: end },
         ...notDeleted,
@@ -148,7 +149,7 @@ async function buildTeacherHome(user) {
   return {
     role: USER_ROLES.TEACHER,
     teaching: teaching.map((t) => ({
-      teachingAssignmentId: t._id,
+      subjectAllocationId: t._id,
       subjectName: t.subjectId?.name ?? null,
       className: t.sectionId?.classId?.level != null ? `Class ${t.sectionId.classId.level}` : null,
       sectionName: t.sectionId?.name ?? null,
@@ -238,8 +239,8 @@ async function buildStudentHome(user) {
     ...notDeleted,
   })
     .sort({ dueDate: 1 })
-    .populate({ path: 'teachingAssignmentId', select: 'subjectId', populate: { path: 'subjectId', select: 'name' } })
-    .select('title dueDate teachingAssignmentId')
+    .populate({ path: 'subjectAllocationId', select: 'subjectId', populate: { path: 'subjectId', select: 'name' } })
+    .select('title dueDate subjectAllocationId')
     .lean();
 
   return {
@@ -260,10 +261,23 @@ async function buildStudentHome(user) {
     upcoming: upcoming.map((a) => ({
       assignmentId: a._id,
       title: a.title,
-      subjectName: a.teachingAssignmentId?.subjectId?.name ?? null,
+      subjectName: a.subjectAllocationId?.subjectId?.name ?? null,
       dueDate: a.dueDate,
       hasSubmitted: submittedMap.has(String(a._id)),
     })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SUPER-ADMIN: platform-wide, cross-school overview
+// ---------------------------------------------------------------------------
+// The super-admin lives above the per-school tenant boundary (schoolId null),
+// so the per-school home shapes don't apply. Reuse the admin overview rollup.
+async function buildAdminHome() {
+  const overview = await adminService.getOverview();
+  return {
+    role: USER_ROLES.SUPER_ADMIN,
+    ...overview,
   };
 }
 
@@ -272,6 +286,8 @@ async function buildStudentHome(user) {
 // ---------------------------------------------------------------------------
 async function getHome(user) {
   switch (user.role) {
+    case USER_ROLES.SUPER_ADMIN:
+      return buildAdminHome(user);
     case USER_ROLES.PRINCIPAL:
       return buildPrincipalHome(user);
     case USER_ROLES.TEACHER:
@@ -283,4 +299,4 @@ async function getHome(user) {
   }
 }
 
-module.exports = { getHome, buildPrincipalHome, buildTeacherHome, buildStudentHome };
+module.exports = { getHome, buildAdminHome, buildPrincipalHome, buildTeacherHome, buildStudentHome };

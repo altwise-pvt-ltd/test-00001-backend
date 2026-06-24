@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TP00001 School API",
-    "description": "Multi-tenant school management API. Flow: principal -> create users (DOB password) -> classes/sections/subjects -> teaching assignments -> assignments -> submissions -> grading.\n\nUsage:\n1. Run **Auth > Login** (prefilled with the seeded principal) — it saves {{token}} automatically.\n2. The create requests save ids ({{classId}}, {{sectionId}}, {{subjectId}}, {{teacherId}}, {{studentId}}, {{teachingAssignmentId}}, {{assignmentId}}, {{submissionId}}) so later requests chain off them.",
+    "description": "Multi-tenant school management API.\n\nRoles: super-admin (\"admin\"), principal, teacher, student.\n\nReal flow:\n1. **Admin > Admin Login** (seeded super-admin) saves {{token}}.\n2. Admin creates a school (saves {{schoolId}}), creates a principal (saves {{principalId}}), assigns the principal to the school, and can set up subjects/classes/sections for a TARGETED school via /schools/:schoolId/... .\n3. **Auth > Login** as the principal to manage their own school: create teachers/students (DOB-derived password), classes, sections, subjects, and a teacher's SubjectAllocations (teacher x subject x section).\n4. Teachers create assignments against their own SubjectAllocation; students submit; teachers grade.\n\nSaved ids chain requests: {{schoolId}}, {{principalId}}, {{classId}}, {{sectionId}}, {{subjectId}}, {{teacherId}}, {{studentId}}, {{subjectAllocationId}}, {{assignmentId}}, {{submissionId}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -12,12 +12,14 @@
     { "key": "baseUrl", "value": "http://localhost:5000/api" },
     { "key": "token", "value": "" },
     { "key": "userId", "value": "" },
+    { "key": "schoolId", "value": "" },
+    { "key": "principalId", "value": "" },
     { "key": "teacherId", "value": "" },
     { "key": "studentId", "value": "" },
     { "key": "classId", "value": "" },
     { "key": "sectionId", "value": "" },
     { "key": "subjectId", "value": "" },
-    { "key": "teachingAssignmentId", "value": "" },
+    { "key": "subjectAllocationId", "value": "" },
     { "key": "assignmentId", "value": "" },
     { "key": "submissionId", "value": "" }
   ],
@@ -35,20 +37,7 @@
       "name": "Auth",
       "item": [
         {
-          "name": "Register",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"New Principal\",\n  \"email\": \"principal@newschool.test\",\n  \"password\": \"Password@123\",\n  \"schoolName\": \"New School\",\n  \"schoolAddress\": \"1 Example Road\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
-          }
-        },
-        {
-          "name": "Login (saves token)",
+          "name": "Login (principal, saves token)",
           "event": [
             {
               "listen": "test",
@@ -126,7 +115,242 @@
       ]
     },
     {
-      "name": "Users (principal)",
+      "name": "Admin (super-admin)",
+      "description": "Platform-level authority (schoolId null). The super-admin is bootstrapped out of band via `npm run create-admin`; the seed creates one too (admin@platform.test / Admin@12345).",
+      "item": [
+        {
+          "name": "Admin Login (saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', res.data.accessToken);",
+                  "  console.log('admin token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@platform.test\",\n  \"password\": \"Admin@12345\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Cross-school Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/overview", "host": ["{{baseUrl}}"], "path": ["admin", "overview"] }
+          }
+        },
+        {
+          "name": "List Schools",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/schools", "host": ["{{baseUrl}}"], "path": ["schools"] }
+          }
+        },
+        {
+          "name": "Create School (saves schoolId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('schoolId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Riverdale High\",\n  \"address\": \"42 River Road\"\n}" },
+            "url": { "raw": "{{baseUrl}}/schools", "host": ["{{baseUrl}}"], "path": ["schools"] }
+          }
+        },
+        {
+          "name": "Get School",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/schools/{{schoolId}}", "host": ["{{baseUrl}}"], "path": ["schools", "{{schoolId}}"] }
+          }
+        },
+        {
+          "name": "List Principals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/principals", "host": ["{{baseUrl}}"], "path": ["principals"] }
+          }
+        },
+        {
+          "name": "Create Principal (saves principalId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data) pm.collectionVariables.set('principalId', res.data.id || res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Principal\",\n  \"email\": \"principal@riverdale.test\",\n  \"password\": \"Principal@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/principals", "host": ["{{baseUrl}}"], "path": ["principals"] }
+          }
+        },
+        {
+          "name": "Assign Principal to School",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"principalId\": \"{{principalId}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/principal",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "principal"]
+            }
+          }
+        },
+        {
+          "name": "Unassign Principal from School",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/principal",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "principal"]
+            }
+          }
+        },
+        {
+          "name": "Activate School",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "activate"]
+            }
+          }
+        },
+        {
+          "name": "Deactivate School",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/deactivate",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "deactivate"]
+            }
+          }
+        },
+        {
+          "name": "Create Subject for School (admin-targeted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('subjectId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Geography\",\n  \"code\": \"GEO\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/subjects",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "subjects"]
+            }
+          }
+        },
+        {
+          "name": "Create Class for School (admin-targeted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('classId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"level\": 7\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "classes"]
+            }
+          }
+        },
+        {
+          "name": "Create Section for School (admin-targeted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('sectionId', res.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"A\",\n  \"classId\": \"{{classId}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/schools/{{schoolId}}/sections",
+              "host": ["{{baseUrl}}"],
+              "path": ["schools", "{{schoolId}}", "sections"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (principal / teacher)",
       "item": [
         {
           "name": "List Users",
@@ -137,7 +361,7 @@
           }
         },
         {
-          "name": "List Teachers (directory)",
+          "name": "List Teachers (directory, principal)",
           "request": {
             "method": "GET",
             "header": [],
@@ -145,7 +369,7 @@
           }
         },
         {
-          "name": "List Students (directory)",
+          "name": "List Students (directory: principal=all, teacher=own sections)",
           "request": {
             "method": "GET",
             "header": [],
@@ -161,7 +385,7 @@
           }
         },
         {
-          "name": "Get Teacher (detail: subjects/classes/sections/assignments)",
+          "name": "Get Teacher (detail: subjects/classes/sections/subjectAllocations/assignments)",
           "request": {
             "method": "GET",
             "header": [],
@@ -173,7 +397,7 @@
           }
         },
         {
-          "name": "Get Student (detail: class/section/subjects/assignments/submissions)",
+          "name": "Get Student (detail: principal=any, teacher=own sections only)",
           "request": {
             "method": "GET",
             "header": [],
@@ -185,13 +409,13 @@
           }
         },
         {
-          "name": "Set Teacher Subjects/Sections (principal: add more or reduce)",
+          "name": "Set Teacher Subjects/Sections (principal: SubjectAllocations)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"teachingAssignments\": [\n    { \"subjectId\": \"{{subjectId}}\", \"sectionId\": \"{{sectionId}}\" }\n  ]\n}"
+              "raw": "{\n  \"subjectAllocations\": [\n    { \"subjectId\": \"{{subjectId}}\", \"sectionId\": \"{{sectionId}}\" }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/users/teachers/{{teacherId}}/teaching",
@@ -201,7 +425,7 @@
           }
         },
         {
-          "name": "Create Teacher (saves teacherId)",
+          "name": "Create Teacher (principal, saves teacherId)",
           "event": [
             {
               "listen": "test",
@@ -209,9 +433,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res && res.data && res.data.user && res.data.user._id) {",
-                  "  pm.collectionVariables.set('teacherId', res.data.user._id);",
-                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "if (res && res.data && res.data.user) {",
+                  "  const id = res.data.user.id || res.data.user._id;",
+                  "  pm.collectionVariables.set('teacherId', id);",
+                  "  pm.collectionVariables.set('userId', id);",
                   "  console.log('initialPassword:', res.data.initialPassword);",
                   "}"
                 ]
@@ -229,7 +454,7 @@
           }
         },
         {
-          "name": "Create Student (saves studentId)",
+          "name": "Create Student (principal or teacher, saves studentId)",
           "event": [
             {
               "listen": "test",
@@ -237,9 +462,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res && res.data && res.data.user && res.data.user._id) {",
-                  "  pm.collectionVariables.set('studentId', res.data.user._id);",
-                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "if (res && res.data && res.data.user) {",
+                  "  const id = res.data.user.id || res.data.user._id;",
+                  "  pm.collectionVariables.set('studentId', id);",
+                  "  pm.collectionVariables.set('userId', id);",
                   "  console.log('initialPassword:', res.data.initialPassword);",
                   "}"
                 ]
@@ -276,7 +502,8 @@
       ]
     },
     {
-      "name": "Classes (principal)",
+      "name": "Classes (principal / admin)",
+      "description": "Principal manages their own school via /classes. Admin targets a school via /schools/:schoolId/classes (see Admin folder).",
       "item": [
         {
           "name": "List Classes",
@@ -347,7 +574,8 @@
       ]
     },
     {
-      "name": "Sections (principal)",
+      "name": "Sections (principal / admin)",
+      "description": "Principal manages their own school via /sections. Admin targets a school via /schools/:schoolId/sections (see Admin folder).",
       "item": [
         {
           "name": "List Sections",
@@ -411,7 +639,8 @@
       ]
     },
     {
-      "name": "Subjects (principal)",
+      "name": "Subjects (principal / admin)",
+      "description": "Principal manages their own school via /subjects. Admin targets a school via /schools/:schoolId/subjects (see Admin folder).",
       "item": [
         {
           "name": "List Subjects",
@@ -470,27 +699,29 @@
       ]
     },
     {
-      "name": "Teaching Assignments (principal)",
+      "name": "Subject Allocations (principal)",
+      "description": "The authority join: teacher x subject x section (one row per fact). classId is derived from the section. A teacher creates assignments only against their own allocations.",
       "item": [
         {
-          "name": "List Teaching Assignments",
+          "name": "List Subject Allocations",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments?teacherId={{teacherId}}",
+              "raw": "{{baseUrl}}/subject-allocations?teacherId={{teacherId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["teaching-assignments"],
+              "path": ["subject-allocations"],
               "query": [
                 { "key": "teacherId", "value": "{{teacherId}}" },
                 { "key": "sectionId", "value": "{{sectionId}}", "disabled": true },
-                { "key": "subjectId", "value": "{{subjectId}}", "disabled": true }
+                { "key": "subjectId", "value": "{{subjectId}}", "disabled": true },
+                { "key": "classId", "value": "{{classId}}", "disabled": true }
               ]
             }
           }
         },
         {
-          "name": "Create Teaching Assignment (saves teachingAssignmentId)",
+          "name": "Create Subject Allocation (saves subjectAllocationId)",
           "event": [
             {
               "listen": "test",
@@ -498,7 +729,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res && res.data && res.data._id) pm.collectionVariables.set('teachingAssignmentId', res.data._id);"
+                  "if (res && res.data && res.data._id) pm.collectionVariables.set('subjectAllocationId', res.data._id);"
                 ]
               }
             }
@@ -510,18 +741,18 @@
               "mode": "raw",
               "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"sectionId\": \"{{sectionId}}\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/teaching-assignments", "host": ["{{baseUrl}}"], "path": ["teaching-assignments"] }
+            "url": { "raw": "{{baseUrl}}/subject-allocations", "host": ["{{baseUrl}}"], "path": ["subject-allocations"] }
           }
         },
         {
-          "name": "Delete Teaching Assignment",
+          "name": "Delete Subject Allocation",
           "request": {
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "raw": "{{baseUrl}}/subject-allocations/{{subjectAllocationId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["teaching-assignments", "{{teachingAssignmentId}}"]
+              "path": ["subject-allocations", "{{subjectAllocationId}}"]
             }
           }
         }
@@ -570,7 +801,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Read chapter 4\",\n  \"teachingAssignmentId\": \"{{teachingAssignmentId}}\",\n  \"description\": \"Read and summarize chapter 4\",\n  \"type\": \"reading\",\n  \"dueDate\": \"2026-07-01\",\n  \"attachments\": []\n}"
+              "raw": "{\n  \"title\": \"Read chapter 4\",\n  \"subjectAllocationId\": \"{{subjectAllocationId}}\",\n  \"description\": \"Read and summarize chapter 4\",\n  \"type\": \"reading\",\n  \"dueDate\": \"2026-07-01\",\n  \"attachments\": []\n}"
             },
             "url": { "raw": "{{baseUrl}}/assignments", "host": ["{{baseUrl}}"], "path": ["assignments"] }
           }

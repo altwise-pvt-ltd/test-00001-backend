@@ -37,7 +37,7 @@ function validateCreateUser(body) {
   }
 
   // students need BOTH class + section (valid ObjectIds); teachers must carry
-  // neither (their sections come from their TeachingAssignments).
+  // neither (their sections come from their SubjectAllocations).
   if (body.role === USER_ROLES.STUDENT) {
     if (!isObjectId(body.classId)) errors.classId = 'A valid classId is required for students';
     else value.classId = body.classId;
@@ -79,33 +79,33 @@ function validateUpdateUser(body) {
 // SET TEACHER TEACHING — the principal sends the FULL desired set of
 // { subjectId, sectionId } pairs for a teacher. The service diffs against the
 // current set (add new, revive removed, soft-delete dropped). An empty array is
-// valid and clears all of the teacher's teaching assignments.
+// valid and clears all of the teacher's subject allocations.
 function validateSetTeacherTeaching(body) {
   const errors = {};
   const value = {};
 
-  const list = body.teachingAssignments;
+  const list = body.subjectAllocations;
   if (!Array.isArray(list)) {
-    errors.teachingAssignments = 'teachingAssignments must be an array of { subjectId, sectionId }';
+    errors.subjectAllocations = 'subjectAllocations must be an array of { subjectId, sectionId }';
     return { valid: false, errors, value };
   }
 
   const items = [];
   list.forEach((item, i) => {
     if (!item || typeof item !== 'object') {
-      errors[`teachingAssignments[${i}]`] = 'Each entry must be an object with subjectId and sectionId';
+      errors[`subjectAllocations[${i}]`] = 'Each entry must be an object with subjectId and sectionId';
       return;
     }
     const okSubject = isObjectId(item.subjectId);
     const okSection = isObjectId(item.sectionId);
-    if (!okSubject) errors[`teachingAssignments[${i}].subjectId`] = 'A valid subjectId is required';
-    if (!okSection) errors[`teachingAssignments[${i}].sectionId`] = 'A valid sectionId is required';
+    if (!okSubject) errors[`subjectAllocations[${i}].subjectId`] = 'A valid subjectId is required';
+    if (!okSection) errors[`subjectAllocations[${i}].sectionId`] = 'A valid sectionId is required';
     if (okSubject && okSection) {
       items.push({ subjectId: item.subjectId, sectionId: item.sectionId });
     }
   });
 
-  value.teachingAssignments = items;
+  value.subjectAllocations = items;
   return { valid: Object.keys(errors).length === 0, errors, value };
 }
 

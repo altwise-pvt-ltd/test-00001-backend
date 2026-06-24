@@ -46,7 +46,8 @@ const requireAuth = asyncHandler(async (req, res, next) => {
   req.user = user;
   req.auth = {
     userId: user._id.toString(),
-    schoolId: user.schoolId.toString(),
+    // null for super-admins and unassigned principals (they have no school).
+    schoolId: user.schoolId ? user.schoolId.toString() : null,
     role: user.role,
     // null for principals/teachers; set for students (used to auto-scope their
     // view of assignments to their own section).

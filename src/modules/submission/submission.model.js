@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { SUBMISSION_STATUS_VALUES, SUBMISSION_STATUS } = require('../../constant/constant');
 
 // Submission = a student's response to an Assignment. The teacher who owns the
-// assignment's TeachingAssignment grades it (grade + feedback).
+// assignment's SubjectAllocation grades it (grade + feedback).
 const submissionSchema = new mongoose.Schema(
   {
     assignmentId: {

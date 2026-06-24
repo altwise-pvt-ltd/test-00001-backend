@@ -30,20 +30,6 @@ function accessExpiresIn() {
   return 900;
 }
 
-const register = asyncHandler(async (req, res) => {
-  const { user, accessToken, refreshRaw } = await authService.register(req.body);
-  setRefreshCookie(res, refreshRaw);
-  res.status(201).json({
-    success: true,
-    data: {
-      accessToken,
-      tokenType: 'Bearer',
-      expiresIn: accessExpiresIn(),
-      user, // toJSON transform strips passwordHash/tokenVersion/__v
-    },
-  });
-});
-
 const login = asyncHandler(async (req, res) => {
   const { accessToken, refreshRaw } = await authService.login(req.body);
   setRefreshCookie(res, refreshRaw);
@@ -95,4 +81,4 @@ const logoutAll = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Logged out of all sessions' });
 });
 
-module.exports = { register, login, refresh, logout, me, logoutAll };
+module.exports = { login, refresh, logout, me, logoutAll };

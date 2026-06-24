@@ -1,6 +1,6 @@
 // Validators for the assignment (homework) module. A teacher supplies the
-// content plus the teachingAssignmentId that authorizes it; the section is
-// derived from that teaching assignment in the service, never sent by the client.
+// content plus the subjectAllocationId that authorizes it; the section is
+// derived from that subject allocation in the service, never sent by the client.
 const mongoose = require('mongoose');
 const { ASSIGNMENT_TYPE_VALUES } = require('../../constant/constant');
 
@@ -60,10 +60,10 @@ function validateCreateAssignment(body) {
     value.title = body.title.trim();
   }
 
-  if (!isObjectId(body.teachingAssignmentId)) {
-    errors.teachingAssignmentId = 'A valid teachingAssignmentId is required';
+  if (!isObjectId(body.subjectAllocationId)) {
+    errors.subjectAllocationId = 'A valid subjectAllocationId is required';
   } else {
-    value.teachingAssignmentId = body.teachingAssignmentId;
+    value.subjectAllocationId = body.subjectAllocationId;
   }
 
   applyOptionalFields(body, errors, value);

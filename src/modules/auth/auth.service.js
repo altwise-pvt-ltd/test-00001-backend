@@ -1,20 +1,20 @@
 // Authentication business logic.
 //
 // CHANGES FROM PRIOR VERSION:
-//  - register now creates a PRINCIPAL + their SCHOOL together (transaction).
-//    Open self-registration for teacher/student is removed; those users are
-//    created via the users module by a principal/teacher.
-//  - email is unique PER SCHOOL. Registration creates a brand-new school, so
-//    no email collision check is needed at register time; the per-school unique
-//    index guards user creation elsewhere.
+//  - public self-registration is REMOVED. Schools are provisioned by a
+//    super-admin (schools module), principals are created by a super-admin
+//    (principals module), and teacher/student users are created by a
+//    principal/teacher via the users module. The first super-admin is
+//    bootstrapped out of band (src/scripts/createAdmin.js).
+//  - email is unique PER SCHOOL (and per-role-globally for the null-school
+//    roles); the user model's indexes guard creation elsewhere.
 //  - sessions now use access + refresh tokens (7d sliding, rotated) plus a
 //    blacklist on logout.
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const User = require('../users/user.model');
 const School = require('../../models/School');
-const TeachingAssignment = require('../assignment/teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const RefreshToken = require('../../models/RefreshToken');
 const BlacklistedToken = require('../../models/BlacklistedToken');
 const ApiError = require('../../utils/ApiError');
@@ -47,54 +47,18 @@ async function issueRefreshToken(user, session = null) {
 }
 
 // ---------------------------------------------------------------------------
-// REGISTER — creates a principal + their school atomically.
-// ---------------------------------------------------------------------------
-async function register({ name, email, password, schoolName, schoolAddress }) {
-  const session = await mongoose.startSession();
-  try {
-    let result;
-    await session.withTransaction(async () => {
-      const [school] = await School.create(
-        [{ name: schoolName, address: schoolAddress || '' }],
-        { session }
-      );
-
-      const passwordHash = await bcrypt.hash(password, config.bcryptRounds);
-
-      const [user] = await User.create(
-        [
-          {
-            name,
-            email,
-            passwordHash,
-            role: USER_ROLES.PRINCIPAL,
-            schoolId: school._id,
-          },
-        ],
-        { session }
-      );
-
-      // backfill school.createdBy now that we have the principal's id
-      school.createdBy = user._id;
-      await school.save({ session });
-
-      const { token: accessToken, jti } = signAccessToken(user);
-      const { raw: refreshRaw } = await issueRefreshToken(user, session);
-
-      result = { user, school, accessToken, jti, refreshRaw };
-    });
-    return result;
-  } finally {
-    session.endSession();
-  }
-}
-
-// ---------------------------------------------------------------------------
 // LOGIN — per-school email; school resolved from the user record.
 // Email is unique per school, so we need a schoolId to disambiguate. The client
 // supplies it (e.g. chosen at login or via subdomain). If your flow keeps email
 // globally unique in practice, schoolId can be omitted and looked up — but per
 // the multi-tenant decision we scope by school.
+//
+// SCHOOL-DEACTIVATION GUARD (soft): if the resolved user belongs to a school,
+// that school must be active. A deactivated school's members (principal,
+// teachers, students) are blocked from logging IN — but any access tokens they
+// already hold keep working until natural expiry (this is deliberately a soft
+// gate, not a hard kill). Super-admins and unassigned principals (schoolId null)
+// have no school and are exempt.
 // ---------------------------------------------------------------------------
 async function login({ email, password, schoolId }) {
   const query = schoolId ? { email, schoolId } : { email };
@@ -107,6 +71,13 @@ async function login({ email, password, schoolId }) {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
     throw ApiError.unauthorized('Invalid credentials');
+  }
+
+  if (user.schoolId) {
+    const school = await School.findById(user.schoolId).select('isActive');
+    if (school && school.isActive === false) {
+      throw ApiError.forbidden('This school is currently inactive');
+    }
   }
 
   const { token: accessToken } = signAccessToken(user);
@@ -168,11 +139,11 @@ async function getMe(userId) {
 
   // For teachers, embed what they teach so the frontend can render it and
   // populate section pickers. The teacher↔section relation lives entirely in
-  // TeachingAssignment (teacher × subject × section) — the single source of
+  // SubjectAllocation (teacher × subject × section) — the single source of
   // truth. Names/levels are populated so the client never sees bare ObjectIds.
   if (user.role !== USER_ROLES.TEACHER) return user;
 
-  const teaching = await TeachingAssignment.find({ teacherId: user._id, deletedAt: null })
+  const teaching = await SubjectAllocation.find({ teacherId: user._id, deletedAt: null })
     .populate('subjectId', 'name code')
     .populate({ path: 'sectionId', select: 'name classId', populate: { path: 'classId', select: 'level' } })
     .lean();
@@ -184,7 +155,7 @@ async function getMe(userId) {
       const section = t.sectionId;
       const cls = section?.classId;
       return {
-        teachingAssignmentId: t._id,
+        subjectAllocationId: t._id,
         subject: subject ? { id: subject._id, name: subject.name, code: subject.code } : null,
         section: section ? { id: section._id, name: section.name } : null,
         class: cls ? { id: cls._id, level: cls.level } : null,
@@ -201,7 +172,6 @@ async function logoutAll(userId) {
 }
 
 module.exports = {
-  register,
   login,
   refresh,
   logout,

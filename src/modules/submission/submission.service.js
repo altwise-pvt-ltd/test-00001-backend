@@ -5,10 +5,10 @@
 // (enforced by a unique index; we also pre-check for a friendly 409).
 //
 // GRADE (step 7): only a teacher who actually teaches the assignment (via its
-// TeachingAssignment) may grade its submissions.
+// SubjectAllocation) may grade its submissions.
 const Submission = require('./submission.model');
 const Assignment = require('../assignment/assignment.model');
-const TeachingAssignment = require('../assignment/teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const { USER_ROLES, SUBMISSION_STATUS } = require('../../constant/constant');
 const ApiError = require('../../utils/ApiError');
 
@@ -23,9 +23,9 @@ async function assertTeacherTeachesAssignment(assignmentId, auth) {
     _id: assignmentId,
     schoolId: auth.schoolId,
     deletedAt: null,
-  }).populate('teachingAssignmentId', 'teacherId');
+  }).populate('subjectAllocationId', 'teacherId');
   if (!a) throw ApiError.notFound('Assignment not found');
-  const ownerId = a.teachingAssignmentId && a.teachingAssignmentId.teacherId;
+  const ownerId = a.subjectAllocationId && a.subjectAllocationId.teacherId;
   if (!ownerId || ownerId.toString() !== auth.userId) {
     throw ApiError.forbidden('You do not teach this assignment');
   }
@@ -75,15 +75,15 @@ async function listSubmissions(auth, filter = {}) {
       await assertTeacherTeachesAssignment(filter.assignmentId, auth);
       query.assignmentId = filter.assignmentId;
     } else {
-      // every assignment under the teacher's teaching assignments
-      const myTas = await TeachingAssignment.find({
+      // every assignment under the teacher's subject allocations
+      const myAllocations = await SubjectAllocation.find({
         schoolId: auth.schoolId,
         teacherId: auth.userId,
         deletedAt: null,
       }).select('_id');
       const mine = await Assignment.find({
         schoolId: auth.schoolId,
-        teachingAssignmentId: { $in: myTas.map((t) => t._id) },
+        subjectAllocationId: { $in: myAllocations.map((t) => t._id) },
         deletedAt: null,
       }).select('_id');
       query.assignmentId = { $in: mine.map((a) => a._id) };

@@ -1,6 +1,10 @@
 // Centralized enums / constants. Single source of truth for roles, statuses, etc.
 
 const USER_ROLES = Object.freeze({
+  // Platform-level authority that provisions and oversees ALL schools. Lives
+  // ABOVE the per-school tenant boundary (schoolId null) and is created only
+  // out of band via src/scripts/createAdmin.js — never over HTTP.
+  SUPER_ADMIN: 'super-admin',
   PRINCIPAL: 'principal',
   TEACHER: 'teacher',
   STUDENT: 'student',

@@ -13,10 +13,12 @@ const refreshTokenSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Nullable: super-admins and unassigned principals have no school but still
+    // get refresh tokens. Set from the user's schoolId at issue time.
     schoolId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'School',
-      required: true,
+      default: null,
       index: true,
     },
 

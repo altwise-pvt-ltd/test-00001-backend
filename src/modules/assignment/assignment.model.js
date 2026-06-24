@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 const { ASSIGNMENT_TYPE_VALUES, ASSIGNMENT_TYPES } = require('../../constant/constant');
 
 // Assignment = the work/book a teacher gives out. It points at a
-// TeachingAssignment, from which it INHERITS its scope (which teacher, which
+// SubjectAllocation, from which it INHERITS its scope (which teacher, which
 // subject, which section). We do not duplicate teacher/subject/section here as
-// the source of truth — they are derived via teachingAssignmentId — but we
+// the source of truth — they are derived via subjectAllocationId — but we
 // denormalize sectionId + schoolId for efficient student-side querying.
 const assignmentSchema = new mongoose.Schema(
   {
@@ -37,9 +37,9 @@ const assignmentSchema = new mongoose.Schema(
     },
 
     // ---- authority + scope source ----
-    teachingAssignmentId: {
+    subjectAllocationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'TeachingAssignment',
+      ref: 'SubjectAllocation',
       required: true,
       index: true,
     },

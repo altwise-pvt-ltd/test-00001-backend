@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 // Section = a division within a Class, e.g. "A" inside "Class 5" -> 5-A.
-// Belongs to exactly one Class. Students and TeachingAssignments point here.
+// Belongs to exactly one Class. Students and SubjectAllocations point here.
 const sectionSchema = new mongoose.Schema(
   {
     name: {

@@ -1,11 +1,11 @@
-// Validators for the teaching-assignment module. All three refs are required;
+// Validators for the subject-allocation module. All three refs are required;
 // the service additionally verifies they belong to the school and that the
 // teacher actually has the TEACHER role.
 const mongoose = require('mongoose');
 
 const isObjectId = (v) => typeof v === 'string' && mongoose.isValidObjectId(v);
 
-function validateCreateTeachingAssignment(body) {
+function validateCreateSubjectAllocation(body) {
   const errors = {};
   const value = {};
 
@@ -27,7 +27,18 @@ function validateCreateTeachingAssignment(body) {
     value.sectionId = body.sectionId;
   }
 
+  // classId is OPTIONAL: the service derives it from the section. If the client
+  // does send one we validate it's a well-formed id (the service then checks it
+  // actually matches the section's class).
+  if (body.classId !== undefined) {
+    if (!isObjectId(body.classId)) {
+      errors.classId = 'classId, if provided, must be a valid id';
+    } else {
+      value.classId = body.classId;
+    }
+  }
+
   return { valid: Object.keys(errors).length === 0, errors, value };
 }
 
-module.exports = { validateCreateTeachingAssignment };
+module.exports = { validateCreateSubjectAllocation };

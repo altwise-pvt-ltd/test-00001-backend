@@ -12,7 +12,9 @@ function signAccessToken(user) {
   const payload = {
     sub: String(user._id),
     role: user.role,
-    schoolId: String(user.schoolId),
+    // null for super-admins / unassigned principals (avoid the literal "null"
+    // string that String(null) would produce).
+    schoolId: user.schoolId ? String(user.schoolId) : null,
     tokenVersion: user.tokenVersion ?? 0,
     jti,
   };

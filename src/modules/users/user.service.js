@@ -10,7 +10,7 @@ const User = require('./user.model');
 const Class = require('../class/class.model');
 const Section = require('../section/section.model');
 require('../subject/subject.model'); // registered for populate('subjectId'); not queried directly here
-const TeachingAssignment = require('../assignment/teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const Assignment = require('../assignment/assignment.model');
 const Submission = require('../submission/submission.model');
 const ApiError = require('../../utils/ApiError');
@@ -36,11 +36,11 @@ async function createUser(creator, body) {
   }
 
   // A teacher may only create students in a section they actually teach. The
-  // teacher↔section relation lives entirely in TeachingAssignment (teacher ×
+  // teacher↔section relation lives entirely in SubjectAllocation (teacher ×
   // subject × section), so derive the allowed sections from there. Teachers
   // carry sectionId = null by design.
   if (creator.role === USER_ROLES.TEACHER) {
-    const teaching = await TeachingAssignment.find({ teacherId: creator.userId, ...notDeleted })
+    const teaching = await SubjectAllocation.find({ teacherId: creator.userId, ...notDeleted })
       .select('sectionId')
       .lean();
 
@@ -51,7 +51,7 @@ async function createUser(creator, body) {
       throw ApiError.forbidden('Teachers can only add students to sections they teach');
     }
     // the student's class must be the one that actually owns the chosen section —
-    // TeachingAssignment carries sectionId, the Section doc carries its classId.
+    // SubjectAllocation carries sectionId, the Section doc carries its classId.
     if (classId) {
       const section = await Section.findOne({ _id: sectionId, ...notDeleted }).select('classId').lean();
       if (!section || String(classId) !== String(section.classId)) {
@@ -107,7 +107,7 @@ async function listUsers(schoolId) {
 
 // Principal-facing table lists: just enough columns to render a directory table,
 // not the full detail payload. Sorted by name for a predictable display order.
-// Both `subjects` and `classes` derive from TeachingAssignment (teacher × subject
+// Both `subjects` and `classes` derive from SubjectAllocation (teacher × subject
 // × section), the single source of truth for what a teacher teaches and where.
 //   subjects : de-duped subjects the teacher teaches
 //   classes  : de-duped classes (each with the sections within it) they teach in
@@ -119,9 +119,9 @@ async function listTeachers(schoolId) {
 
   if (teachers.length === 0) return [];
 
-  // One query for ALL teachers' teaching assignments, then group in memory (no N+1).
+  // One query for ALL teachers' subject allocations, then group in memory (no N+1).
   const teacherIds = teachers.map((t) => t._id);
-  const teaching = await TeachingAssignment.find({ teacherId: { $in: teacherIds }, schoolId, ...notDeleted })
+  const teaching = await SubjectAllocation.find({ teacherId: { $in: teacherIds }, schoolId, ...notDeleted })
     .populate('subjectId', 'name code')
     .populate({ path: 'sectionId', select: 'name classId', populate: { path: 'classId', select: 'level' } })
     .lean();
@@ -171,8 +171,21 @@ async function listTeachers(schoolId) {
   });
 }
 
-async function listStudents(schoolId) {
-  const students = await User.find({ schoolId, role: USER_ROLES.STUDENT, ...notDeleted })
+// TEACHER read-scoping (CHANGE 6): a principal sees ALL students in their school;
+// a teacher sees ONLY students in a section they actually teach (derived from
+// their SubjectAllocation rows). The caller's identity/role comes from req.auth.
+async function listStudents(auth) {
+  const schoolId = auth.schoolId;
+  const query = { schoolId, role: USER_ROLES.STUDENT, ...notDeleted };
+
+  if (auth.role === USER_ROLES.TEACHER) {
+    const taughtSectionIds = await SubjectAllocation.find({ teacherId: auth.userId, schoolId, ...notDeleted })
+      .distinct('sectionId');
+    // A teacher with no allocations teaches no sections -> sees no students.
+    query.sectionId = { $in: taughtSectionIds };
+  }
+
+  const students = await User.find(query)
     .select('name email isActive classId sectionId createdAt')
     .populate('classId', 'level')
     .populate('sectionId', 'name')
@@ -234,33 +247,33 @@ function ensureFound(id, label) {
 }
 
 // getTeacherById: the teacher + everything they teach/created.
-//   subjects / classes / sections : de-duped across all their teaching assignments
-//   teachingAssignments           : the raw "teaches subject S to section X" rows
+//   subjects / classes / sections : de-duped across all their subject allocations
+//   subjectAllocations            : the raw "teaches subject S to section X" rows
 //   assignments                   : work they handed out, newest first
 async function getTeacherById(id, schoolId) {
   ensureFound(id, 'Teacher');
   const teacher = await User.findOne({ _id: id, schoolId, role: USER_ROLES.TEACHER, ...notDeleted });
   if (!teacher) throw ApiError.notFound('Teacher not found');
 
-  const teaching = await TeachingAssignment.find({ teacherId: id, schoolId, ...notDeleted })
+  const teaching = await SubjectAllocation.find({ teacherId: id, schoolId, ...notDeleted })
     .populate('subjectId', 'name code')
     .populate({ path: 'sectionId', select: 'name classId', populate: { path: 'classId', select: 'level' } })
     .lean();
 
-  const taIds = teaching.map((t) => t._id);
+  const allocationIds = teaching.map((t) => t._id);
 
-  const assignments = await Assignment.find({ teachingAssignmentId: { $in: taIds }, schoolId, ...notDeleted })
+  const assignments = await Assignment.find({ subjectAllocationId: { $in: allocationIds }, schoolId, ...notDeleted })
     .sort({ createdAt: -1 })
     .populate('sectionId', 'name')
     .select('title type dueDate sectionId createdAt')
     .lean();
 
-  // de-dupe the related entities the teacher touches across all assignments
+  // de-dupe the related entities the teacher touches across all allocations
   const subjects = new Map();
   const classes = new Map();
   const sections = new Map();
 
-  const teachingAssignments = teaching.map((t) => {
+  const subjectAllocations = teaching.map((t) => {
     const subject = t.subjectId;
     const section = t.sectionId;
     const cls = section?.classId;
@@ -277,14 +290,14 @@ async function getTeacherById(id, schoolId) {
     };
   });
 
-  // The teacher's classes/sections are derived below from TeachingAssignment
+  // The teacher's classes/sections are derived below from SubjectAllocation
   // (the single source of truth) — there is no separate class-assignment relation.
   return {
     ...teacher.toJSON(),
     subjects: [...subjects.values()],
     classes: [...classes.values()],
     sections: [...sections.values()],
-    teachingAssignments,
+    subjectAllocations,
     assignments: assignments.map((a) => ({
       id: a._id,
       title: a.title,
@@ -302,10 +315,22 @@ async function getTeacherById(id, schoolId) {
 //   assignments     : everything assigned to their section, with this student's
 //                     submission state (pending | submitted | graded) folded in
 //   submissions     : the rows this student has actually filed
-async function getStudentById(id, schoolId) {
+async function getStudentById(id, auth) {
   ensureFound(id, 'Student');
+  const schoolId = auth.schoolId;
   const student = await User.findOne({ _id: id, schoolId, role: USER_ROLES.STUDENT, ...notDeleted });
   if (!student) throw ApiError.notFound('Student not found');
+
+  // TEACHER read-scoping (CHANGE 6): a teacher may only view a student who is in
+  // a section they actually teach. We treat "not in your section" as a 404 (same
+  // as "doesn't exist") so the endpoint never confirms a student outside the
+  // teacher's reach. A principal sees any student in their school.
+  if (auth.role === USER_ROLES.TEACHER) {
+    const taughtSectionIds = await SubjectAllocation.find({ teacherId: auth.userId, schoolId, ...notDeleted })
+      .distinct('sectionId');
+    const teaches = taughtSectionIds.some((sid) => String(sid) === String(student.sectionId));
+    if (!teaches) throw ApiError.notFound('Student not found');
+  }
 
   const sectionId = student.sectionId;
 
@@ -313,7 +338,7 @@ async function getStudentById(id, schoolId) {
     student.classId ? Class.findOne({ _id: student.classId, ...notDeleted }).select('level').lean() : null,
     sectionId ? Section.findOne({ _id: sectionId, ...notDeleted }).select('name').lean() : null,
     sectionId
-      ? TeachingAssignment.find({ sectionId, schoolId, ...notDeleted })
+      ? SubjectAllocation.find({ sectionId, schoolId, ...notDeleted })
           .populate('subjectId', 'name code')
           .populate('teacherId', 'name email')
           .lean()
@@ -321,8 +346,8 @@ async function getStudentById(id, schoolId) {
     sectionId
       ? Assignment.find({ sectionId, schoolId, ...notDeleted })
           .sort({ createdAt: -1 })
-          .populate({ path: 'teachingAssignmentId', select: 'subjectId', populate: { path: 'subjectId', select: 'name' } })
-          .select('title type dueDate teachingAssignmentId createdAt')
+          .populate({ path: 'subjectAllocationId', select: 'subjectId', populate: { path: 'subjectId', select: 'name' } })
+          .select('title type dueDate subjectAllocationId createdAt')
           .lean()
       : [],
   ]);
@@ -353,7 +378,7 @@ async function getStudentById(id, schoolId) {
         title: a.title,
         type: a.type,
         dueDate: a.dueDate,
-        subjectName: a.teachingAssignmentId?.subjectId?.name ?? null,
+        subjectName: a.subjectAllocationId?.subjectId?.name ?? null,
         hasSubmitted: !!sub,
         status: sub?.status ?? SUBMISSION_STATUS.PENDING,
         grade: sub?.grade ?? null,

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 // Subject = a taught subject, e.g. "Mathematics". Owned by a school.
-// Teachers are linked to subjects (per section) via TeachingAssignment.
+// Teachers are linked to subjects (per section) via SubjectAllocation.
 const subjectSchema = new mongoose.Schema(
   {
     name: {

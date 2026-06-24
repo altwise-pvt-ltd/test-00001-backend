@@ -2,7 +2,7 @@
 // No business logic here.
 const asyncHandler = require('../../utils/asyncHandler');
 const userService = require('./user.service');
-const teachingService = require('../assignment/teachingAssignment.service');
+const subjectAllocationService = require('../subjectAllocation/subjectAllocation.service');
 
 const list = asyncHandler(async (req, res) => {
   const users = await userService.listUsers(req.auth.schoolId);
@@ -16,7 +16,9 @@ const listTeachers = asyncHandler(async (req, res) => {
 });
 
 const listStudents = asyncHandler(async (req, res) => {
-  const students = await userService.listStudents(req.auth.schoolId);
+  // Scoped in the service by role: principal -> whole school; teacher -> only
+  // students in sections they teach.
+  const students = await userService.listStudents(req.auth);
   res.json({ success: true, data: students });
 });
 
@@ -33,18 +35,20 @@ const getTeacher = asyncHandler(async (req, res) => {
 });
 
 const getStudent = asyncHandler(async (req, res) => {
-  const student = await userService.getStudentById(req.params.id, req.auth.schoolId);
+  // Scoped in the service by role: a teacher may only view students in sections
+  // they teach (404 otherwise); a principal sees any student in their school.
+  const student = await userService.getStudentById(req.params.id, req.auth);
   res.json({ success: true, data: student });
 });
 
-// Principal-only: replace a teacher's set of subjects/sections (teaching
-// assignments). Body: { teachingAssignments: [{ subjectId, sectionId }, ...] }.
+// Principal-only: replace a teacher's set of subjects/sections (subject
+// allocations). Body: { subjectAllocations: [{ subjectId, sectionId }, ...] }.
 // Returns the refreshed teacher detail so the client sees the new subjects/classes.
 const updateTeacherTeaching = asyncHandler(async (req, res) => {
-  const summary = await teachingService.syncTeacherAssignments(
+  const summary = await subjectAllocationService.syncTeacherAllocations(
     req.auth.schoolId,
     req.params.id,
-    req.body.teachingAssignments,
+    req.body.subjectAllocations,
     req.auth.userId
   );
   const teacher = await userService.getTeacherById(req.params.id, req.auth.schoolId);

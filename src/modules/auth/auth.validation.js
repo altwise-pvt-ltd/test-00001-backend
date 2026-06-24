@@ -4,47 +4,6 @@ const mongoose = require('mongoose');
 const isObjectId = (v) => typeof v === 'string' && mongoose.isValidObjectId(v);
 const isEmail = (v) => typeof v === 'string' && /^\S+@\S+\.\S+$/.test(v);
 
-// REGISTER: a principal signs up and names their school. role is forced to
-// 'principal' in the service — it is NOT accepted from the body.
-function validateRegister(body) {
-  const errors = {};
-  const value = {};
-
-  if (typeof body.name !== 'string' || body.name.trim().length < 2) {
-    errors.name = 'Name must be at least 2 characters';
-  } else {
-    value.name = body.name.trim();
-  }
-
-  if (!isEmail(body.email)) {
-    errors.email = 'A valid email is required';
-  } else {
-    value.email = body.email.trim().toLowerCase();
-  }
-
-  if (typeof body.password !== 'string' || body.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters';
-  } else {
-    value.password = body.password;
-  }
-
-  if (typeof body.schoolName !== 'string' || body.schoolName.trim().length < 2) {
-    errors.schoolName = 'School name is required';
-  } else {
-    value.schoolName = body.schoolName.trim();
-  }
-
-  if (body.schoolAddress !== undefined) {
-    if (typeof body.schoolAddress !== 'string') {
-      errors.schoolAddress = 'School address must be a string';
-    } else {
-      value.schoolAddress = body.schoolAddress.trim();
-    }
-  }
-
-  return { valid: Object.keys(errors).length === 0, errors, value };
-}
-
 // LOGIN: schoolId is optional here (multi-tenant disambiguation). Email + pw required.
 function validateLogin(body) {
   const errors = {};
@@ -73,4 +32,4 @@ function validateLogin(body) {
   return { valid: Object.keys(errors).length === 0, errors, value };
 }
 
-module.exports = { validateRegister, validateLogin };
+module.exports = { validateLogin };

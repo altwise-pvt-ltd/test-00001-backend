@@ -22,17 +22,21 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 
-// Principal-only directory lists (trimmed to table columns). Placed before the
+// Directory lists (trimmed to table columns). Placed before the
 // '/teachers/:id' / '/students/:id' detail routes — exact paths, no conflict.
+// Teacher list stays principal-only; student list is open to teachers too but
+// the service scopes a teacher to only the students in sections they teach.
 router.get('/teachers', requireRole(USER_ROLES.PRINCIPAL), controller.listTeachers);
-router.get('/students', requireRole(USER_ROLES.PRINCIPAL), controller.listStudents);
+router.get('/students', requireRole(USER_ROLES.PRINCIPAL, USER_ROLES.TEACHER), controller.listStudents);
 
 // Detail views with related data (placed before '/:id' so the literal
-// 'teachers'/'students' segments are not swallowed by the :id param).
+// 'teachers'/'students' segments are not swallowed by the :id param). The
+// student detail is restricted to principal + teacher; the service further
+// limits a teacher to students in a section they teach (404 otherwise).
 router.get('/teachers/:id', controller.getTeacher);
-router.get('/students/:id', controller.getStudent);
+router.get('/students/:id', requireRole(USER_ROLES.PRINCIPAL, USER_ROLES.TEACHER), controller.getStudent);
 
-// Principal manages a teacher's subjects/sections — i.e. their TeachingAssignments
+// Principal manages a teacher's subjects/sections — i.e. their SubjectAllocations
 // (teacher × subject × section), the single source of truth for the teacher↔section
 // relation. Sends the full desired set; the service diffs it (add/revive/remove).
 // Restricted to the school's PRINCIPAL.

@@ -1,38 +1,38 @@
 // Business logic for assignments (the homework a teacher gives out).
 //
 // AUTHORITY (step 4): a teacher can only create an assignment against a
-// TeachingAssignment that belongs to them — that's what "only within what they
-// teach" means. The section is inherited from that teaching assignment, so the
+// SubjectAllocation that belongs to them — that's what "only within what they
+// teach" means. The section is inherited from that subject allocation, so the
 // client never chooses a section directly.
 //
 // SCOPING (step 5): listing/reading is filtered by role — a student only ever
 // sees assignments for their own section; a teacher sees those under their own
-// teaching assignments; a principal sees the whole school.
+// subject allocations; a principal sees the whole school.
 const Assignment = require('./assignment.model');
-const TeachingAssignment = require('./teachingAssignment.model');
+const SubjectAllocation = require('../subjectAllocation/subjectAllocation.model');
 const { USER_ROLES } = require('../../constant/constant');
 const ApiError = require('../../utils/ApiError');
 
 const POPULATE = [
-  { path: 'teachingAssignmentId', select: 'teacherId subjectId sectionId' },
+  { path: 'subjectAllocationId', select: 'teacherId subjectId sectionId' },
   { path: 'sectionId', select: 'name' },
 ];
 
-// Verify the teaching assignment exists in this school AND belongs to this
+// Verify the subject allocation exists in this school AND belongs to this
 // teacher; return it (we need its sectionId to denormalize onto the assignment).
-async function assertTeacherAuthority(teachingAssignmentId, schoolId, teacherId) {
-  const ta = await TeachingAssignment.findOne({
-    _id: teachingAssignmentId,
+async function assertTeacherAuthority(subjectAllocationId, schoolId, teacherId) {
+  const allocation = await SubjectAllocation.findOne({
+    _id: subjectAllocationId,
     schoolId,
     deletedAt: null,
   });
-  if (!ta) {
-    throw ApiError.badRequest('teachingAssignmentId does not reference a teaching assignment in this school');
+  if (!allocation) {
+    throw ApiError.badRequest('subjectAllocationId does not reference a subject allocation in this school');
   }
-  if (ta.teacherId.toString() !== teacherId) {
+  if (allocation.teacherId.toString() !== teacherId) {
     throw ApiError.forbidden('You can only create assignments for what you teach');
   }
-  return ta;
+  return allocation;
 }
 
 // True if this user may edit/delete the assignment (its owning teacher, or any
@@ -43,12 +43,12 @@ function canManage(assignment, auth) {
 }
 
 async function createAssignment(schoolId, teacherId, data) {
-  const { teachingAssignmentId, ...rest } = data;
-  const ta = await assertTeacherAuthority(teachingAssignmentId, schoolId, teacherId);
+  const { subjectAllocationId, ...rest } = data;
+  const allocation = await assertTeacherAuthority(subjectAllocationId, schoolId, teacherId);
   return Assignment.create({
     ...rest,
-    teachingAssignmentId,
-    sectionId: ta.sectionId, // inherited scope — not client-provided
+    subjectAllocationId,
+    sectionId: allocation.sectionId, // inherited scope — not client-provided
     schoolId,
     createdBy: teacherId,
   });
@@ -61,12 +61,12 @@ async function listAssignments(auth, filter = {}) {
     // auto-scope to the student's own section (step 5)
     query.sectionId = auth.sectionId;
   } else if (auth.role === USER_ROLES.TEACHER) {
-    const myTas = await TeachingAssignment.find({
+    const myAllocations = await SubjectAllocation.find({
       schoolId: auth.schoolId,
       teacherId: auth.userId,
       deletedAt: null,
     }).select('_id');
-    query.teachingAssignmentId = { $in: myTas.map((t) => t._id) };
+    query.subjectAllocationId = { $in: myAllocations.map((t) => t._id) };
   }
   // principal: no extra restriction (whole school)
 
@@ -85,7 +85,7 @@ async function getAssignmentById(id, auth) {
       throw ApiError.forbidden('This assignment is not for your section');
     }
   } else if (auth.role === USER_ROLES.TEACHER) {
-    const ownerId = a.teachingAssignmentId && a.teachingAssignmentId.teacherId;
+    const ownerId = a.subjectAllocationId && a.subjectAllocationId.teacherId;
     if (!ownerId || ownerId.toString() !== auth.userId) {
       throw ApiError.forbidden('You do not teach this assignment');
     }

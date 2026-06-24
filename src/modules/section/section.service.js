@@ -1,9 +1,14 @@
 // Business logic for sections. Tenant-scoped by schoolId. A section must belong
 // to a class that exists in the same school, so we verify classId before
 // create/update. Soft-delete only.
+//
+// Managed by BOTH a principal (own school) and the super-admin (a school they
+// target explicitly). schoolId is resolved upstream (resolveSchoolScope); every
+// mutation re-verifies that target school exists and is not soft-deleted.
 const Section = require('./section.model');
 const Class = require('../class/class.model');
 const ApiError = require('../../utils/ApiError');
+const { assertSchoolExists } = require('../schools/school.guard');
 
 // Guard: the referenced class must exist and belong to this school.
 async function assertClassInSchool(classId, schoolId) {
@@ -27,6 +32,7 @@ async function getSectionById(id, schoolId) {
 }
 
 async function createSection(schoolId, data, userId) {
+  await assertSchoolExists(schoolId);
   await assertClassInSchool(data.classId, schoolId);
   const existing = await Section.findOne({
     classId: data.classId,
@@ -38,6 +44,7 @@ async function createSection(schoolId, data, userId) {
 }
 
 async function updateSection(id, schoolId, data, userId) {
+  await assertSchoolExists(schoolId);
   if (data.classId) await assertClassInSchool(data.classId, schoolId);
   const doc = await Section.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
@@ -49,6 +56,7 @@ async function updateSection(id, schoolId, data, userId) {
 }
 
 async function deleteSection(id, schoolId, userId) {
+  await assertSchoolExists(schoolId);
   const doc = await Section.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
     { deletedAt: new Date(), updatedBy: userId },
